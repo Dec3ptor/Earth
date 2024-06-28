@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cesium Globe with User Login</title>
+    <style>
+        @import url('Cesium/Widgets/widgets.css');
+
+        html, body, #cesiumContainer {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #loginButton, #logoutButton {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            z-index: 1000;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        #logoutButton {
+            background-color: #f44336;
+            display: none;
+        }
+
+        .cesium-infoBox {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            max-width: 300px;
+            background: rgba(38, 38, 38, 0.95);
+            color: #edffff;
+            border-radius: 7px;
+            padding: 10px;
+            font-size: 14px;
+            z-index: 999;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <button id="loginButton">Login</button>
+    <button id="logoutButton">Logout</button>
+
+    <!-- <script src="dist/bundle.js"></script> -->
+</body>
+</html>
