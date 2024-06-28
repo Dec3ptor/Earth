@@ -1,0 +1,36 @@
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+#container {
+  width: 100vw;
+  height: 100vh;
+}
+
+.label {
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 2px 4px;
+  border-radius: 2px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.label.hidden {
+  display: none;
+}
+
+#debug {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 5px;
+  border-radius: 3px;
+}
