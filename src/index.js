@@ -18,15 +18,13 @@ document.addEventListener('DOMContentLoaded', function() {
     shouldAnimate: true
   });
 
-    // Remove the Cesium ion logo
-    viewer.cesiumWidget.creditContainer.removeChild(
+  // Remove the Cesium ion logo
+  viewer.cesiumWidget.creditContainer.removeChild(
     viewer.cesiumWidget.creditContainer.lastChild
   );
   
-  // LAYERS CODE
-  // Add this to your existing code, after initializing the viewer
-
-class LayerManager {
+  // Layer Manager Class
+  class LayerManager {
     constructor(viewer) {
       this.viewer = viewer;
       this.layers = new Map();
@@ -68,26 +66,9 @@ class LayerManager {
   
   // Initialize the LayerManager
   const layerManager = new LayerManager(viewer);
-  
-//   // Example usage:
-//   // Add a cloud layer (static example)
-//   const cloudProvider = new Cesium.UrlTemplateImageryProvider({
-//     url: 'https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=YOUR_API_KEY',
-//     minimumLevel: 0,
-//     maximumLevel: 18
-//   });
-//   layerManager.addLayer('clouds', cloudProvider, 0.5);
-  
-  // Toggle cloud layer visibility
-  // layerManager.toggleLayer('clouds', false);
-  
-  // Update cloud layer opacity
-  // layerManager.updateLayerAlpha('clouds', 0.7);
 
-  // END OF LAYERS CODE
-// Function to format date for GIBS URL
-// Function to format date for GIBS URL
-function formatDateForGIBS(date) {
+  // Function to format date for GIBS URL
+  function formatDateForGIBS(date) {
     return date.toISOString().split('T')[0];  // Returns YYYY-MM-DD
   }
   
@@ -102,8 +83,8 @@ function formatDateForGIBS(date) {
   // Get the initial date
   const initialDate = getMostRecentDate();
   
-  // Create a custom time-varying provider
-  const customProvider = new Cesium.UrlTemplateImageryProvider({
+  // Create a custom time-varying provider for the cloud layer
+  const cloudProvider = new Cesium.UrlTemplateImageryProvider({
     url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/{Time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg',
     tilingScheme: new Cesium.WebMercatorTilingScheme(),
     minimumLevel: 0,
@@ -118,26 +99,74 @@ function formatDateForGIBS(date) {
     credit: new Cesium.Credit('NASA Global Imagery Browse Services for EOSDIS')
   });
   
-  // Log the date being sent to GIBS
-  console.log('Initial date being sent to GIBS:', initialDate);
-  
   // Add the cloud layer to the layer manager
-  layerManager.addLayer('clouds', customProvider, 0.7);
+  const cloudLayer = layerManager.addLayer('clouds', cloudProvider, 1.0);
   
   // Function to update the cloud layer time
   function updateCloudLayer() {
     const newDate = getMostRecentDate();
     console.log('Updating cloud layer time to:', newDate);
-    customProvider.customTags.Time = function() {
+    cloudProvider.customTags.Time = function() {
       return newDate;
     };
-    layerManager.layers.get('clouds').imageryProvider.reload();
+    cloudLayer.imageryProvider.reload();
   }
   
   // Update the cloud layer every 30 minutes
   setInterval(updateCloudLayer, 30 * 60 * 1000);
   
-  // Optional: Add a button to toggle the cloud layer
+  // Function to calculate cloud layer opacity based on camera height
+  function calculateCloudOpacity(cameraHeight, fadeStartHeight, fadeEndHeight) {
+    if (cameraHeight > fadeStartHeight) return 1.0;
+    if (cameraHeight < fadeEndHeight) return 0.0;
+    return (cameraHeight - fadeEndHeight) / (fadeStartHeight - fadeEndHeight);
+  }
+
+  // Add these variables for fade heights
+  let fadeStartHeight = 10000000; // 10,000 km
+  let fadeEndHeight = 1000000; // 1,000 km
+
+  // Update cloud layer opacity based on camera height
+  viewer.camera.changed.addEventListener(() => {
+    const cameraHeight = viewer.camera.positionCartographic.height;
+    const opacity = calculateCloudOpacity(cameraHeight, fadeStartHeight, fadeEndHeight);
+    layerManager.updateLayerAlpha('clouds', opacity);
+  });
+
+  // Add UI elements for adjusting fade heights
+  const uiContainer = document.createElement('div');
+  uiContainer.style.position = 'absolute';
+  uiContainer.style.top = '50px';
+  uiContainer.style.left = '10px';
+  uiContainer.style.background = 'rgba(255, 255, 255, 0.8)';
+  uiContainer.style.padding = '10px';
+  uiContainer.style.borderRadius = '5px';
+  
+  uiContainer.innerHTML = `
+    <div>
+      <label for="fadeStart">Fade Start Height (km): </label>
+      <input type="number" id="fadeStart" value="${fadeStartHeight / 1000}" min="0" step="1000">
+    </div>
+    <div>
+      <label for="fadeEnd">Fade End Height (km): </label>
+      <input type="number" id="fadeEnd" value="${fadeEndHeight / 1000}" min="0" step="100">
+    </div>
+  `;
+  
+  document.body.appendChild(uiContainer);
+
+  // Add event listeners for the input fields
+  document.getElementById('fadeStart').addEventListener('change', (e) => {
+    fadeStartHeight = parseFloat(e.target.value) * 1000;
+    viewer.scene.requestRender();
+  });
+
+  document.getElementById('fadeEnd').addEventListener('change', (e) => {
+    fadeEndHeight = parseFloat(e.target.value) * 1000;
+    viewer.scene.requestRender();
+  });
+
+  // Toggle cloud layer visibility button
   const toggleCloudButton = document.createElement('button');
   toggleCloudButton.textContent = 'Toggle Cloud Layer';
   toggleCloudButton.style.position = 'absolute';
@@ -154,18 +183,36 @@ function formatDateForGIBS(date) {
       console.error('Cloud layer not found');
     }
   });
-//   // Optional: Add time-based layer visibility
-//   viewer.scene.postUpdate.addEventListener(function() {
-//     const currentTime = Cesium.JulianDate.toDate(viewer.clock.currentTime);
-//     const localTime = new Date(currentTime.getTime() + currentTime.getTimezoneOffset() * 60000);
-//     const hours = localTime.getHours();
+
+  // Custom layer for night side of the Earth
+  const nightLayer = viewer.imageryLayers.addImageryProvider(new Cesium.SingleTileImageryProvider({
+    url: '/assets/night.jpg', // Replace with the path to your night texture image
+    tileWidth: 256,
+    tileHeight: 256
+  }));
+  
+
+  // Function to calculate night layer opacity
+  function calculateNightLayerOpacity(cameraPosition, sunPosition) {
+    const cameraVector = Cesium.Cartesian3.normalize(cameraPosition, new Cesium.Cartesian3());
+    const sunVector = Cesium.Cartesian3.normalize(sunPosition, new Cesium.Cartesian3());
+    const dot = Cesium.Cartesian3.dot(cameraVector, sunVector);
     
-//     const cloudLayer = layerManager.layers.get('clouds');
-//     if (cloudLayer) {
-//       // Show cloud layer only during night hours (7 PM to 7 AM) if it's not manually hidden
-//       cloudLayer.show = cloudLayer.show && (hours >= 19 || hours < 7);
-//     }
-//   });
+    const sunsetStart = 0.1;
+    const sunsetEnd = -0.3;
+  
+    if (dot > sunsetStart) return 0.0;
+    if (dot < sunsetEnd) return 0.5;
+    return Cesium.Math.clamp((sunsetStart - dot) / (sunsetStart - sunsetEnd), 0.0, 0.5);
+  }
+
+  // Update night layer opacity
+  viewer.scene.preRender.addEventListener(() => {
+    const cameraPosition = viewer.camera.positionWC;
+    const sunPosition = viewer.scene.sun.position;
+    nightLayer.alpha = calculateNightLayerOpacity(cameraPosition, sunPosition);
+  });
+
   
   // If you want to remove all credits
   viewer.cesiumWidget.creditContainer.style.display = "none";
@@ -242,7 +289,7 @@ function calculateTransparency(cameraPosition, sunPosition) {
     if (dot > sunsetStart) {
       return 0.0;  // Full day
     } else if (dot < sunsetEnd) {
-      return 0.7;  // Night, but not fully opaque to allow cloud visibility
+      return 0.5;  // Night, but not fully opaque to allow cloud visibility
     } else {
       // Smooth transition
       return Cesium.Math.clamp((sunsetStart - dot) / (sunsetStart - sunsetEnd), 0.0, 0.7);
@@ -286,7 +333,7 @@ function calculateTransparency(cameraPosition, sunPosition) {
     // Ensure the cloud layer remains visible
     const cloudLayer = layerManager.layers.get('clouds');
     if (cloudLayer) {
-      cloudLayer.alpha = 0.7; // Adjust this value as needed
+      cloudLayer.alpha = 1; // Adjust this value as needed
     }
   };
 
@@ -366,149 +413,138 @@ function calculateTransparency(cameraPosition, sunPosition) {
     });
 
     // Update user location periodically
-    if (currentUser) {
-      updateUserLocation();
-    }
+    // if (currentUser) {
+    //   updateUserLocation();
+    // }
   }
 
-  // Custom layer for night side of the Earth
-  const nightLayer = viewer.imageryLayers.addImageryProvider(new Cesium.SingleTileImageryProvider({
-    url: '/assets/night.jpg', // Replace with the path to your night texture image
-    tileWidth: 256,
-    tileHeight: 256
-  }));
+  // // User login and location marking
+  // let currentUser = null;
+  // const userMarkers = new Map();
 
+  // // Create login modal
+  // const loginModal = document.createElement('div');
+  // loginModal.innerHTML = `
+  //   <div id="loginModalContent" style="background: white; padding: 20px; border-radius: 5px; text-align: center;">
+  //     <h2>Login</h2>
+  //     <input type="text" id="usernameInput" placeholder="Enter your name" style="margin: 10px; padding: 5px;">
+  //     <br>
+  //     <button id="submitLogin" style="padding: 5px 10px;">Login</button>
+  //   </div>
+  // `;
+  // loginModal.style.cssText = `
+  //   display: none;
+  //   position: fixed;
+  //   z-index: 1000;
+  //   left: 0;
+  //   top: 0;
+  //   width: 100%;
+  //   height: 100%;
+  //   background-color: rgba(0,0,0,0.4);
+  //   display: flex;
+  //   justify-content: center;
+  //   align-items: center;
+  // `;
+  // document.body.appendChild(loginModal);
 
-  // Add custom night layer to the scene
-  viewer.scene.imageryLayers.add(nightLayer);
+  // function showLoginModal() {
+  //   loginModal.style.display = 'flex';
+  // }
 
-  // User login and location marking
-  let currentUser = null;
-  const userMarkers = new Map();
+  // function hideLoginModal() {
+  //   loginModal.style.display = 'none';
+  // }
 
-  // Create login modal
-  const loginModal = document.createElement('div');
-  loginModal.innerHTML = `
-    <div id="loginModalContent" style="background: white; padding: 20px; border-radius: 5px; text-align: center;">
-      <h2>Login</h2>
-      <input type="text" id="usernameInput" placeholder="Enter your name" style="margin: 10px; padding: 5px;">
-      <br>
-      <button id="submitLogin" style="padding: 5px 10px;">Login</button>
-    </div>
-  `;
-  loginModal.style.cssText = `
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0,0,0,0.4);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  `;
-  document.body.appendChild(loginModal);
+  // function login() {
+  //   const username = document.getElementById('usernameInput').value.trim();
+  //   if (username) {
+  //     currentUser = username;
+  //     updateUserLocation();
+  //     hideLoginModal();
+  //     document.getElementById('loginButton').style.display = 'none';
+  //     document.getElementById('logoutButton').style.display = 'inline-block';
+  //   }
+  // }
 
-  function showLoginModal() {
-    loginModal.style.display = 'flex';
-  }
+  // function logout() {
+  //   if (currentUser) {
+  //     userMarkers.get(currentUser).show = false;
+  //     userMarkers.delete(currentUser);
+  //     currentUser = null;
+  //     document.getElementById('loginButton').style.display = 'inline-block';
+  //     document.getElementById('logoutButton').style.display = 'none';
+  //   }
+  // }
 
-  function hideLoginModal() {
-    loginModal.style.display = 'none';
-  }
+  // function updateUserLocation() {
+  //   if ('geolocation' in navigator) {
+  //     navigator.geolocation.getCurrentPosition((position) => {
+  //       const { latitude, longitude } = position.coords;
+  //       addOrUpdateUserMarker(currentUser, latitude, longitude);
+  //     }, (error) => {
+  //       console.error("Error getting location:", error);
+  //       alert("Unable to get your location. Please check your browser settings.");
+  //     });
+  //   } else {
+  //     alert("Geolocation is not supported by your browser.");
+  //   }
+  // }
 
-  function login() {
-    const username = document.getElementById('usernameInput').value.trim();
-    if (username) {
-      currentUser = username;
-      updateUserLocation();
-      hideLoginModal();
-      document.getElementById('loginButton').style.display = 'none';
-      document.getElementById('logoutButton').style.display = 'inline-block';
-    }
-  }
-
-  function logout() {
-    if (currentUser) {
-      userMarkers.get(currentUser).show = false;
-      userMarkers.delete(currentUser);
-      currentUser = null;
-      document.getElementById('loginButton').style.display = 'inline-block';
-      document.getElementById('logoutButton').style.display = 'none';
-    }
-  }
-
-  function updateUserLocation() {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition((position) => {
-        const { latitude, longitude } = position.coords;
-        addOrUpdateUserMarker(currentUser, latitude, longitude);
-      }, (error) => {
-        console.error("Error getting location:", error);
-        alert("Unable to get your location. Please check your browser settings.");
-      });
-    } else {
-      alert("Geolocation is not supported by your browser.");
-    }
-  }
-
-  function addOrUpdateUserMarker(username, latitude, longitude) {
-    const position = Cesium.Cartesian3.fromDegrees(longitude, latitude);
+  // function addOrUpdateUserMarker(username, latitude, longitude) {
+  //   const position = Cesium.Cartesian3.fromDegrees(longitude, latitude);
     
-    if (userMarkers.has(username)) {
-      userMarkers.get(username).position = position;
-    } else {
-      const userEntity = viewer.entities.add({
-        name: username,
-        position: position,
-        point: {
-          pixelSize: 10,
-          color: Cesium.Color.BLUE
-        },
-        label: {
-          text: username,
-          font: '14pt sans-serif',
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 2,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          pixelOffset: new Cesium.Cartesian2(0, -10)
-        }
-      });
-      userMarkers.set(username, userEntity);
-    }
-  }
+  //   if (userMarkers.has(username)) {
+  //     userMarkers.get(username).position = position;
+  //   } else {
+  //     const userEntity = viewer.entities.add({
+  //       name: username,
+  //       position: position,
+  //       point: {
+  //         pixelSize: 10,
+  //         color: Cesium.Color.BLUE
+  //       },
+  //       label: {
+  //         text: username,
+  //         font: '14pt sans-serif',
+  //         fillColor: Cesium.Color.WHITE,
+  //         outlineColor: Cesium.Color.BLACK,
+  //         outlineWidth: 2,
+  //         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+  //         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+  //         pixelOffset: new Cesium.Cartesian2(0, -10)
+  //       }
+  //     });
+  //     userMarkers.set(username, userEntity);
+  //   }
+  // }
 
-  // Add event listeners for login and logout buttons
-  const loginButton = document.getElementById('loginButton');
-  const logoutButton = document.getElementById('logoutButton');
-  const submitLoginButton = document.getElementById('submitLogin');
+  // // Add event listeners for login and logout buttons
+  // const loginButton = document.getElementById('loginButton');
+  // const logoutButton = document.getElementById('logoutButton');
+  // const submitLoginButton = document.getElementById('submitLogin');
 
-  if (loginButton) {
-    loginButton.addEventListener('click', showLoginModal);
-  } else {
-    console.error("Login button not found");
-  }
+  // if (loginButton) {
+  //   loginButton.addEventListener('click', showLoginModal);
+  // } else {
+  //   console.error("Login button not found");
+  // }
 
-  if (logoutButton) {
-    logoutButton.addEventListener('click', logout);
-  } else {
-    console.error("Logout button not found");
-  }
+  // if (logoutButton) {
+  //   logoutButton.addEventListener('click', logout);
+  // } else {
+  //   console.error("Logout button not found");
+  // }
 
-  if (submitLoginButton) {
-    submitLoginButton.addEventListener('click', login);
-  } else {
-    console.error("Submit login button not found");
-  }
+  // if (submitLoginButton) {
+  //   submitLoginButton.addEventListener('click', login);
+  // } else {
+  //   console.error("Submit login button not found");
+  // }
 
-  // Hide logout button initially
-  if (logoutButton) {
-    logoutButton.style.display = 'none';
-  }
+  // // Hide logout button initially
+  // if (logoutButton) {
+  //   logoutButton.style.display = 'none';
+  // }
 
   // Initial call to update positions
   updateSunMoonPositions();
