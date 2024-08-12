@@ -45,13 +45,31 @@
             font-size: 14px;
             z-index: 999;
         }
+
+        #cloudLayers {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body>
     <div id="cesiumContainer"></div>
     <button id="loginButton">Login</button>
     <button id="logoutButton">Logout</button>
+    <select id="cloudLayers">
+        <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">True Color</option>
+        <option value="MODIS_Terra_CorrectedReflectance_TrueColor">MODIS Terra</option>
+        <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua</option>
+    </select>
 
-    <!-- <script src="dist/bundle.js"></script> -->
+    <script src="Cesium/Cesium.js"></script>
 </body>
 </html>

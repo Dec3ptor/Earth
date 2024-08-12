@@ -1,35 +1,29 @@
 import * as Cesium from 'cesium';
 import * as Astronomy from 'astronomy-engine';
-
-// Import Cesium CSS globally
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
 // Set the base URL for Cesium
 window.CESIUM_BASE_URL = '/Cesium';
 
-// Wait for the DOM to be fully loaded before running our script
-document.addEventListener('DOMContentLoaded', function() {
-  // Initialize Cesium Viewer
+document.addEventListener('DOMContentLoaded', async function() {
   const viewer = new Cesium.Viewer('cesiumContainer', {
     terrainProvider: null,
-    infoBox: false, // Disable the default InfoBox
+    infoBox: false,
     sceneMode: Cesium.SceneMode.SCENE3D,
     shadows: true,
     shouldAnimate: true
   });
 
-  // Attempt to remove the Cesium ion logo if it exists
+  // Remove the Cesium ion logo if it exists
   if (viewer.cesiumWidget.creditContainer.lastChild) {
     try {
-      viewer.cesiumWidget.creditContainer.removeChild(
-        viewer.cesiumWidget.creditContainer.lastChild
-      );
+      viewer.cesiumWidget.creditContainer.removeChild(viewer.cesiumWidget.creditContainer.lastChild);
     } catch (e) {
       console.warn("Failed to remove Cesium ion logo:", e);
     }
   }
 
-  // Layer Manager Class
+  // Initialize the LayerManager
   class LayerManager {
     constructor(viewer) {
       this.viewer = viewer;
@@ -70,106 +64,148 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  const layerManager = new LayerManager(viewer);
 
-
-// Initialize the LayerManager
-const layerManager = new LayerManager(viewer);
-
-// Function to format date for GIBS URL
-function formatDateForGIBS(date) {
-  return date.toISOString().split('T')[0];  // Returns YYYY-MM-DD
+   // Function to format date for GIBS URL
+   function formatDateForGIBS(date) {
+    if (!(date instanceof Date)) {
+        console.error('Invalid date:', date);
+        return '';
+    }
+    return date.toISOString().split('T')[0];
 }
 
-// Function to get a valid recent date (2 days ago to ensure data availability)
-function getRecentValidDate() {
-  const now = new Date();
-  now.setUTCDate(now.getUTCDate() - 2);  // Use 2 days ago
-  now.setUTCHours(0, 0, 0, 0);  // Set time to 00:00:00 UTC
+async function getMostRecentDate(layerName) {
+  const baseUrl = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml';
+
+  let now = new Date();
+  let maxRetries = 48; // Retry for up to 48 hours back
+
+  if (layerName === 'VIIRS_SNPP_CorrectedReflectance_TrueColor') {
+      // Set date to 1 day ago
+      now.setUTCDate(now.getUTCDate() - 1);
+      now.setUTCHours(0, 0, 0, 0);
+      return now;
+  }
+
+  while (maxRetries > 0) {
+      try {
+          const response = await fetch(baseUrl);
+          const text = await response.text();
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(text, "text/xml");
+          const layers = xmlDoc.getElementsByTagName("Layer");
+          for (let layer of layers) {
+              if (layer.getElementsByTagName("ows:Identifier")[0].textContent === layerName) {
+                  const dimension = layer.getElementsByTagName("Dimension")[0];
+                  const values = dimension.textContent.split('/');
+                  const endTime = values[1];
+                  const recentDate = new Date(endTime.split('T')[0]);
+                  if (recentDate <= now) {
+                      return recentDate;
+                  }
+              }
+          }
+      } catch (error) {
+          console.error('Error fetching most recent date:', error);
+      }
+
+      // Step back an hour and retry
+      now.setHours(now.getHours() - 1);
+      maxRetries--;
+  }
+
+  // Fallback to 2 days ago if the query fails completely
+  now = new Date();
+  now.setUTCDate(now.getUTCDate() - 2);
+  now.setUTCHours(0, 0, 0, 0);
   return now;
 }
 
-//MODIS_Terra_CorrectedReflectance_TrueColor
-//VIIRS_SNPP_CorrectedReflectance_TrueColor
-// Function to create a new cloud provider
-function createCloudProvider(date) {
-  return new Cesium.UrlTemplateImageryProvider({
-    url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?' +
-         'SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
-         '&LAYER=VIIRS_SNPP_CorrectedReflectance_TrueColor' +
-         '&STYLE=default' +
-         '&TIME={Time}' +
-         '&TILEMATRIXSET=GoogleMapsCompatible_Level9' +
-         '&TILEMATRIX={TileMatrix}' +
-         '&TILEROW={TileRow}' +
-         '&TILECOL={TileCol}' +
-         '&FORMAT=image%2Fjpeg',
-    tilingScheme: new Cesium.WebMercatorTilingScheme(),
-    minimumLevel: 0,
-    maximumLevel: 9,
-    tileWidth: 256,
-    tileHeight: 256,
-    customTags: {
-      Time: function() {
-        return formatDateForGIBS(date);
-      },
-      TileMatrix: function(imageryProvider, x, y, level) {
-        return level;
-      },
-      TileRow: function(imageryProvider, x, y, level) {
-        return y;
-      },
-      TileCol: function(imageryProvider, x, y, level) {
-        return x;
-      }
-    },
-    credit: new Cesium.Credit('NASA Global Imagery Browse Services for EOSDIS')
-  });
+
+function createCloudProvider(date, layerName = 'VIIRS_SNPP_CorrectedReflectance_TrueColor') {
+    return new Cesium.UrlTemplateImageryProvider({
+        url: 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/wmts.cgi?' +
+             'SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
+             '&LAYER=' + layerName +
+             '&STYLE=default' +
+             '&TIME={Time}' +
+             '&TILEMATRIXSET=GoogleMapsCompatible_Level9' +
+             '&TILEMATRIX={TileMatrix}' +
+             '&TILEROW={TileRow}' +
+             '&TILECOL={TileCol}' +
+             '&FORMAT=image%2Fjpeg',
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        minimumLevel: 0,
+        maximumLevel: 9,
+        tileWidth: 256,
+        tileHeight: 256,
+        customTags: {
+            Time: function() {
+                return formatDateForGIBS(date);
+            },
+            TileMatrix: function(imageryProvider, x, y, level) {
+                return level;
+            },
+            TileRow: function(imageryProvider, x, y, level) {
+                return y;
+            },
+            TileCol: function(imageryProvider, x, y, level) {
+                return x;
+            }
+        },
+        credit: new Cesium.Credit('NASA Global Imagery Browse Services for EOSDIS')
+    });
 }
 
 // Get the initial date and create the initial cloud provider
-let currentDate = getRecentValidDate();
-let cloudProvider = createCloudProvider(currentDate);
+let currentDate = new Date(await getMostRecentDate());
+let currentLayer = 'VIIRS_SNPP_CorrectedReflectance_TrueColor';
+let cloudProvider = createCloudProvider(currentDate, currentLayer);
 
 // Add the cloud layer to the layer manager
 let cloudLayer = layerManager.addLayer('clouds', cloudProvider, 1.0);
 
 // Function to update the cloud layer
-function updateCloudLayer() {
-  currentDate = getRecentValidDate();
-  console.log('Updating cloud layer time to:', formatDateForGIBS(currentDate));
+async function updateCloudLayer(layer) {
+    currentDate = new Date(await getMostRecentDate());
+    console.log('Updating cloud layer to:', layer, 'with date:', formatDateForGIBS(currentDate));
 
-  // Create a new cloud provider with the updated date
-  const newCloudProvider = createCloudProvider(currentDate);
+    // Create a new cloud provider with the updated layer and date
+    const newCloudProvider = createCloudProvider(currentDate, layer);
 
-  // Remove the old layer and add the new one
-  layerManager.removeLayer('clouds');
-  cloudLayer = layerManager.addLayer('clouds', newCloudProvider, 1.0);
+    // Remove the old layer and add the new one
+    layerManager.removeLayer('clouds');
+    cloudLayer = layerManager.addLayer('clouds', newCloudProvider, 1.0);
 
-  // Update the cloudProvider reference
-  cloudProvider = newCloudProvider;
+    // Update the cloudProvider reference
+    cloudProvider = newCloudProvider;
 }
 
-// Update the cloud layer every 30 minutes
-setInterval(updateCloudLayer, 30 * 60 * 1000);
+// Event listener for cloud layer picker
+document.getElementById('cloudLayers').addEventListener('change', function() {
+    currentLayer = this.value;
+    updateCloudLayer(currentLayer);
+});
 
-// ... rest of your code remains the same
+// Update the cloud layer every 30 minutes
+setInterval(() => updateCloudLayer(currentLayer), 30 * 60 * 1000);
 
 // Immediately call updateCloudLayer to ensure we have a valid date
-updateCloudLayer();
-  
-    // Universal layer fading function
-    function calculateLayerOpacity(cameraHeight, fadeStartHeight, fadeEndHeight, baseOpacity = 1) {
-      if (cameraHeight >= fadeStartHeight) return baseOpacity;
-      if (cameraHeight <= fadeEndHeight) return 0.0;
-      return baseOpacity * (cameraHeight - fadeEndHeight) / (fadeStartHeight - fadeEndHeight);
-    }
-  
-    // Layer configurations
-    const layerConfigs = {
-      clouds: { fadeStartHeight: 2000000, fadeEndHeight: 0 },
-      night: { fadeStartHeight: 500000, fadeEndHeight: 50000 }
-    };
-  
+updateCloudLayer(currentLayer);
+
+  // Universal layer fading function
+  function calculateLayerOpacity(cameraHeight, fadeStartHeight, fadeEndHeight, baseOpacity = 1) {
+    if (cameraHeight >= fadeStartHeight) return baseOpacity;
+    if (cameraHeight <= fadeEndHeight) return 0.0;
+    return baseOpacity * (cameraHeight - fadeEndHeight) / (fadeStartHeight - fadeEndHeight);
+  }
+
+  // Layer configurations
+  const layerConfigs = {
+    clouds: { fadeStartHeight: 1000000, fadeEndHeight: 0 },
+    night: { fadeStartHeight: 500000, fadeEndHeight: 50000 }
+  };
 
   // Custom layer for night side of the Earth
   const nightLayer = layerManager.addLayer('night', new Cesium.SingleTileImageryProvider({
@@ -180,6 +216,8 @@ updateCloudLayer();
 
   // Function to calculate night layer opacity
   function calculateNightLayerOpacity(cameraPosition, sunPosition) {
+    if (!cameraPosition || !sunPosition) return 0.0;
+
     const cameraVector = Cesium.Cartesian3.normalize(cameraPosition, new Cesium.Cartesian3());
     const sunVector = Cesium.Cartesian3.normalize(sunPosition, new Cesium.Cartesian3());
     const dot = Cesium.Cartesian3.dot(cameraVector, sunVector);
@@ -264,6 +302,8 @@ updateCloudLayer();
     }
   });
 
+
+
   // If you want to remove all credits
   viewer.cesiumWidget.creditContainer.style.display = "none";
 
@@ -294,7 +334,7 @@ updateCloudLayer();
   }
 
   let previousSunCartographic, previousMoonCartographic;
-  let previousTime = new Date();
+  let previousTime = new Date(); // Initialize previousTime
 
   // Function to convert celestial coordinates to geographic coordinates
   function celestialToGeographic(ra, dec, gmst) {
@@ -332,16 +372,14 @@ updateCloudLayer();
     const sunVector = Cesium.Cartesian3.normalize(sunPosition, new Cesium.Cartesian3());
     const dot = Cesium.Cartesian3.dot(cameraVector, sunVector);
 
-    // Adjust these values to fine-tune the transition
-    const sunsetStart = 0.1;  // Start fading in night at this dot product
-    const sunsetEnd = -0.3;   // Fully night at this dot product
+    const sunsetStart = 0.1;
+    const sunsetEnd = -0.3;
 
     if (dot > sunsetStart) {
-      return 0.0;  // Full day
+      return 0.0;
     } else if (dot < sunsetEnd) {
-      return 0.5;  // Night, but not fully opaque to allow cloud visibility
+      return 0.5;
     } else {
-      // Smooth transition
       return Cesium.Math.clamp((sunsetStart - dot) / (sunsetStart - sunsetEnd), 0.0, 0.7);
     }
   }
@@ -377,13 +415,15 @@ updateCloudLayer();
     // Update the night layer's alpha based on sun position
     const updateNightLayerAlpha = () => {
       const cameraPosition = viewer.camera.positionWC;
-      const alpha = calculateTransparency(cameraPosition, sunCartesian);
-      nightLayer.alpha = alpha;
+      if (cameraPosition) {
+        const alpha = calculateTransparency(cameraPosition, sunCartesian);
+        nightLayer.alpha = alpha;
+      }
 
       // Ensure the cloud layer remains visible
       const cloudLayer = layerManager.layers.get('clouds');
       if (cloudLayer) {
-        cloudLayer.alpha = 1; // Adjust this value as needed
+        cloudLayer.alpha = 1;
       }
     };
 
@@ -394,45 +434,6 @@ updateCloudLayer();
     if (!viewer.camera.changed.numberOfListeners) {
       viewer.camera.changed.addEventListener(updateNightLayerAlpha);
     }
-
-    // // Update or create markers
-    // if (!viewer.entities.getById('sun')) {
-    //   viewer.entities.add(new Cesium.Entity({
-    //     id: 'sun',
-    //     position: sunCartesian,
-    //     point: { pixelSize: 20, color: Cesium.Color.YELLOW },
-    //     label: {
-    //       text: 'Sun',
-    //       font: '14pt sans-serif',
-    //       fillColor: Cesium.Color.YELLOW,
-    //       outlineColor: Cesium.Color.BLACK,
-    //       outlineWidth: 1,
-    //       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-    //       pixelOffset: new Cesium.Cartesian2(0, -30)
-    //     }
-    //   }));
-    // } else {
-    //   viewer.entities.getById('sun').position = sunCartesian;
-    // }
-
-    // if (!viewer.entities.getById('moon')) {
-    //   viewer.entities.add(new Cesium.Entity({
-    //     id: 'moon',
-    //     position: moonCartesian,
-    //     point: { pixelSize: 20, color: Cesium.Color.WHITE },
-    //     label: {
-    //       text: 'Moon',
-    //       font: '14pt sans-serif',
-    //       fillColor: Cesium.Color.WHITE,
-    //       outlineColor: Cesium.Color.BLACK,
-    //       outlineWidth: 1,
-    //       style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-    //       pixelOffset: new Cesium.Cartesian2(0, -30)
-    //     }
-    //   }));
-    // } else {
-    //   viewer.entities.getById('moon').position = moonCartesian;
-    // }
 
     // Store current positions and time for next update
     previousSunCartographic = sunCartographic;
@@ -461,11 +462,6 @@ updateCloudLayer();
         hideInfoBox();
       }
     });
-
-    // Update user location periodically
-    // if (currentUser) {
-    //   updateUserLocation();
-    // }
   }
 
   // Initial call to update positions
@@ -476,4 +472,105 @@ updateCloudLayer();
 
   // Enable real-time clock mode
   viewer.clock.shouldAnimate = true;
+
+  // Function to add a marker
+  function addMarker(lat, lon, label) {
+    const marker = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(lon, lat),
+      point: { pixelSize: 10, color: Cesium.Color.RED },
+      label: {
+        text: label,
+        font: '14pt sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.BLACK,
+        outlineWidth: 2,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -20)
+      }
+    });
+    return marker;
+  }
+
+  // Add markers from saved data
+  function loadMarkers(markersData) {
+    markersData.forEach(markerData => {
+      addMarker(markerData.lat, markerData.lon, markerData.label);
+    });
+  }
+
+  // Save markers to a file
+  function saveMarkers(markersData) {
+    const blob = new Blob([JSON.stringify(markersData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'markers.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Right-click to add marker
+  viewer.screenSpaceEventHandler.setInputAction((click) => {
+    const earthPosition = viewer.scene.pickPosition(click.position);
+    if (Cesium.defined(earthPosition)) {
+      const cartographic = Cesium.Cartographic.fromCartesian(earthPosition);
+      const lat = Cesium.Math.toDegrees(cartographic.latitude);
+      const lon = Cesium.Math.toDegrees(cartographic.longitude);
+      const label = prompt('Enter label for marker:');
+      if (label) {
+        addMarker(lat, lon, label);
+      }
+    }
+  }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  // Toggle markers visibility button
+  const toggleMarkersButton = document.createElement('button');
+  toggleMarkersButton.textContent = 'Toggle Markers';
+  toggleMarkersButton.style.position = 'absolute';
+  toggleMarkersButton.style.top = '10px';
+  toggleMarkersButton.style.left = '120px';
+  document.body.appendChild(toggleMarkersButton);
+
+  toggleMarkersButton.addEventListener('click', () => {
+    viewer.entities.values.forEach(entity => {
+      entity.show = !entity.show;
+    });
+  });
+
+  // Save markers button
+  const saveMarkersButton = document.createElement('button');
+  saveMarkersButton.textContent = 'Save Markers';
+  saveMarkersButton.style.position = 'absolute';
+  saveMarkersButton.style.top = '10px';
+  saveMarkersButton.style.left = '220px';
+  document.body.appendChild(saveMarkersButton);
+
+  saveMarkersButton.addEventListener('click', () => {
+    const markersData = viewer.entities.values.map(entity => ({
+      lat: Cesium.Cartographic.fromCartesian(entity.position.getValue(Cesium.JulianDate.now())).latitude * (180 / Math.PI),
+      lon: Cesium.Cartographic.fromCartesian(entity.position.getValue(Cesium.JulianDate.now())).longitude * (180 / Math.PI),
+      label: entity.label.text.getValue(Cesium.JulianDate.now())
+    }));
+    saveMarkers(markersData);
+  });
+
+  // Load markers from file
+  const loadMarkersButton = document.createElement('input');
+  loadMarkersButton.type = 'file';
+  loadMarkersButton.style.position = 'absolute';
+  loadMarkersButton.style.top = '10px';
+  loadMarkersButton.style.left = '320px';
+  document.body.appendChild(loadMarkersButton);
+
+  loadMarkersButton.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const markersData = JSON.parse(e.target.result);
+        loadMarkers(markersData);
+      };
+      reader.readAsText(file);
+    }
+  });
 });
