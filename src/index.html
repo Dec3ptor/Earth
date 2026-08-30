@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="theme-color" content="#0b0b12">
     <title>Cesium Globe with User Login</title>
     <style>
         @import url('Cesium/Widgets/widgets.css');
@@ -13,12 +17,19 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
+            touch-action: none;
+            overscroll-behavior: none;
+        }
+
+        button, select, input[type="file"] {
+            font-size: 14px;
         }
 
         #loginButton, #logoutButton {
             position: absolute;
-            top: 50px;
+            top: env(safe-area-inset-top, 0px);
             right: 10px;
+            margin-top: 10px;
             z-index: 1000;
             padding: 10px;
             background-color: #4CAF50;
@@ -35,7 +46,7 @@
 
         .cesium-infoBox {
             position: absolute;
-            top: 50px;
+            bottom: 10px;
             right: 10px;
             max-width: 300px;
             background: rgba(38, 38, 38, 0.95);
@@ -46,17 +57,67 @@
             z-index: 999;
         }
 
-        #cloudLayers {
+        /* Responsive control toolbar: wraps naturally instead of relying on
+           fixed pixel offsets, so it fits on narrow phone screens */
+        #controlsToolbar {
             position: absolute;
-            top: 10px;
-            left: 10px;
+            top: env(safe-area-inset-top, 0px);
+            left: 0;
+            margin: 10px;
             z-index: 1000;
-            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-width: calc(100vw - 20px);
+        }
+
+        #controlsToolbar button,
+        #controlsToolbar select {
+            padding: 10px 12px;
+            min-height: 40px;
             background-color: #4CAF50;
             color: white;
             border: none;
             cursor: pointer;
             border-radius: 5px;
+            white-space: nowrap;
+        }
+
+        #controlsToolbar .load-markers-input {
+            max-width: 140px;
+            align-self: center;
+            color: white;
+        }
+
+        .fade-panel {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            margin-top: env(safe-area-inset-top, 0px);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            max-width: calc(100vw - 40px);
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .fade-panel h3 {
+            margin: 8px 0 4px;
+        }
+
+        .fade-panel input[type="number"] {
+            width: 80px;
+        }
+
+        @media (max-width: 480px) {
+            #controlsToolbar button,
+            #controlsToolbar select {
+                flex: 1 1 calc(50% - 8px);
+                font-size: 13px;
+                padding: 12px 8px;
+            }
         }
     </style>
 </head>
@@ -64,11 +125,14 @@
     <div id="cesiumContainer"></div>
     <button id="loginButton">Login</button>
     <button id="logoutButton">Logout</button>
-    <select id="cloudLayers">
-        <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">True Color</option>
-        <option value="MODIS_Terra_CorrectedReflectance_TrueColor">MODIS Terra</option>
-        <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua</option>
-    </select>
+
+    <div id="controlsToolbar">
+        <select id="cloudLayers">
+            <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">True Color</option>
+            <option value="MODIS_Terra_CorrectedReflectance_TrueColor">MODIS Terra</option>
+            <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua</option>
+        </select>
+    </div>
 
     <script src="Cesium/Cesium.js"></script>
 </body>

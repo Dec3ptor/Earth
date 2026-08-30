@@ -2,8 +2,8 @@ import * as Cesium from 'cesium';
 import * as Astronomy from 'astronomy-engine';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
 
-// Set the base URL for Cesium
-window.CESIUM_BASE_URL = '/Cesium';
+// Set the base URL for Cesium (relative so it works under a GitHub Pages subpath too)
+window.CESIUM_BASE_URL = './Cesium';
 
 document.addEventListener('DOMContentLoaded', async function() {
   const viewer = new Cesium.Viewer('cesiumContainer', {
@@ -209,7 +209,7 @@ updateCloudLayer(currentLayer);
 
   // Custom layer for night side of the Earth
   const nightLayer = layerManager.addLayer('night', new Cesium.SingleTileImageryProvider({
-    url: '/assets/night.jpg',
+    url: './assets/textures/night.jpg',
     tileWidth: 256,
     tileHeight: 256
   }), 0.0);
@@ -246,14 +246,14 @@ updateCloudLayer(currentLayer);
     });
   });
 
-  // Add UI elements for adjusting fade heights
+  // Shared responsive toolbar that all control buttons attach to (defined in index.html)
+  const controlsToolbar = document.getElementById('controlsToolbar');
+
+  // Add UI elements for adjusting fade heights, tucked into a collapsible panel
   const uiContainer = document.createElement('div');
-  uiContainer.style.position = 'absolute';
-  uiContainer.style.top = '50px';
-  uiContainer.style.left = '10px';
-  uiContainer.style.background = 'rgba(255, 255, 255, 0.8)';
-  uiContainer.style.padding = '10px';
-  uiContainer.style.borderRadius = '5px';
+  uiContainer.id = 'fadePanel';
+  uiContainer.className = 'fade-panel';
+  uiContainer.hidden = true;
 
   Object.entries(layerConfigs).forEach(([layerName, config]) => {
     uiContainer.innerHTML += `
@@ -284,13 +284,19 @@ updateCloudLayer(currentLayer);
     });
   });
 
+  // Toggle button for the fade-height settings panel above
+  const toggleFadePanelButton = document.createElement('button');
+  toggleFadePanelButton.textContent = 'Layer Settings';
+  controlsToolbar.appendChild(toggleFadePanelButton);
+
+  toggleFadePanelButton.addEventListener('click', () => {
+    uiContainer.hidden = !uiContainer.hidden;
+  });
+
   // Toggle cloud layer visibility button
   const toggleCloudButton = document.createElement('button');
   toggleCloudButton.textContent = 'Toggle Cloud Layer';
-  toggleCloudButton.style.position = 'absolute';
-  toggleCloudButton.style.top = '10px';
-  toggleCloudButton.style.left = '10px';
-  document.body.appendChild(toggleCloudButton);
+  controlsToolbar.appendChild(toggleCloudButton);
 
   toggleCloudButton.addEventListener('click', () => {
     const cloudLayer = layerManager.layers.get('clouds');
@@ -509,9 +515,9 @@ updateCloudLayer(currentLayer);
     URL.revokeObjectURL(url);
   }
 
-  // Right-click to add marker
-  viewer.screenSpaceEventHandler.setInputAction((click) => {
-    const earthPosition = viewer.scene.pickPosition(click.position);
+  // Right-click (desktop) or double-tap (touch devices, which have no right-click) to add a marker
+  function placeMarkerAt(position) {
+    const earthPosition = viewer.scene.pickPosition(position);
     if (Cesium.defined(earthPosition)) {
       const cartographic = Cesium.Cartographic.fromCartesian(earthPosition);
       const lat = Cesium.Math.toDegrees(cartographic.latitude);
@@ -521,15 +527,20 @@ updateCloudLayer(currentLayer);
         addMarker(lat, lon, label);
       }
     }
+  }
+
+  viewer.screenSpaceEventHandler.setInputAction((click) => {
+    placeMarkerAt(click.position);
   }, Cesium.ScreenSpaceEventType.RIGHT_CLICK);
+
+  viewer.screenSpaceEventHandler.setInputAction((click) => {
+    placeMarkerAt(click.position);
+  }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
   // Toggle markers visibility button
   const toggleMarkersButton = document.createElement('button');
   toggleMarkersButton.textContent = 'Toggle Markers';
-  toggleMarkersButton.style.position = 'absolute';
-  toggleMarkersButton.style.top = '10px';
-  toggleMarkersButton.style.left = '120px';
-  document.body.appendChild(toggleMarkersButton);
+  controlsToolbar.appendChild(toggleMarkersButton);
 
   toggleMarkersButton.addEventListener('click', () => {
     viewer.entities.values.forEach(entity => {
@@ -540,10 +551,7 @@ updateCloudLayer(currentLayer);
   // Save markers button
   const saveMarkersButton = document.createElement('button');
   saveMarkersButton.textContent = 'Save Markers';
-  saveMarkersButton.style.position = 'absolute';
-  saveMarkersButton.style.top = '10px';
-  saveMarkersButton.style.left = '220px';
-  document.body.appendChild(saveMarkersButton);
+  controlsToolbar.appendChild(saveMarkersButton);
 
   saveMarkersButton.addEventListener('click', () => {
     const markersData = viewer.entities.values.map(entity => ({
@@ -557,10 +565,8 @@ updateCloudLayer(currentLayer);
   // Load markers from file
   const loadMarkersButton = document.createElement('input');
   loadMarkersButton.type = 'file';
-  loadMarkersButton.style.position = 'absolute';
-  loadMarkersButton.style.top = '10px';
-  loadMarkersButton.style.left = '320px';
-  document.body.appendChild(loadMarkersButton);
+  loadMarkersButton.className = 'load-markers-input';
+  controlsToolbar.appendChild(loadMarkersButton);
 
   loadMarkersButton.addEventListener('change', (event) => {
     const file = event.target.files[0];
