@@ -37,10 +37,6 @@ module.exports = {
             {
                 test: /\.(png|gif|jpg|jpeg|svg|xml|json)$/,
                 use: ['url-loader']
-            },
-            {
-                test: /\.glsl$/,
-                use: ['webpack-glsl-loader']
             }
         ]
     },
@@ -50,9 +46,7 @@ module.exports = {
         }),
         new CopyWebpackPlugin({
             patterns: [
-                { from: 'node_modules/cesium/Build/Cesium', to: 'Cesium' },
-                { from: 'src/assets', to: 'assets' },
-                { from: 'src/shaders', to: 'shaders' }
+                { from: 'node_modules/cesium/Build/Cesium', to: 'Cesium' }
             ]
         })
     ],

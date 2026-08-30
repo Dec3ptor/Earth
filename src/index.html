@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="theme-color" content="#0b0b12">
-    <title>Cesium Globe with User Login</title>
+    <title>Earth Compare</title>
     <style>
         @import url('Cesium/Widgets/widgets.css');
 
@@ -19,119 +19,161 @@
             overflow: hidden;
             touch-action: none;
             overscroll-behavior: none;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif;
         }
 
-        button, select, input[type="file"] {
-            font-size: 14px;
-        }
-
-        #loginButton, #logoutButton {
+        /* Draggable vertical divider for the split-screen A/B comparison */
+        #splitHandle {
             position: absolute;
-            top: env(safe-area-inset-top, 0px);
+            top: 0;
+            bottom: 0;
+            width: 44px;
+            margin-left: -22px;
+            z-index: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            cursor: ew-resize;
+        }
+
+        #splitHandle::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            background: rgba(255, 255, 255, 0.85);
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        .split-handle-grip {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(20, 20, 30, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            pointer-events: none;
+        }
+
+        .side-label {
+            position: absolute;
+            top: calc(env(safe-area-inset-top, 0px) + 10px);
+            z-index: 400;
+            background: rgba(10, 10, 20, 0.75);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            max-width: 46vw;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        #sideLabelA {
+            left: 10px;
+            border-left: 3px solid #4dd0ff;
+        }
+
+        #sideLabelB {
             right: 10px;
-            margin-top: 10px;
-            z-index: 1000;
-            padding: 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
+            border-right: 3px solid #ff9a4d;
         }
 
-        #logoutButton {
-            background-color: #f44336;
-            display: none;
-        }
-
-        .cesium-infoBox {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            max-width: 300px;
-            background: rgba(38, 38, 38, 0.95);
-            color: #edffff;
-            border-radius: 7px;
-            padding: 10px;
-            font-size: 14px;
-            z-index: 999;
-        }
-
-        /* Responsive control toolbar: wraps naturally instead of relying on
-           fixed pixel offsets, so it fits on narrow phone screens */
-        #controlsToolbar {
-            position: absolute;
-            top: env(safe-area-inset-top, 0px);
+        /* Bottom control sheet: source + date pickers for each side, plus Flick */
+        #comparePanel {
+            position: fixed;
             left: 0;
-            margin: 10px;
+            right: 0;
+            bottom: 0;
             z-index: 1000;
+            background: rgba(12, 12, 20, 0.92);
+            padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .compare-card {
             display: flex;
             flex-wrap: wrap;
+            align-items: center;
             gap: 8px;
-            max-width: calc(100vw - 20px);
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            padding: 8px;
         }
 
-        #controlsToolbar button,
-        #controlsToolbar select {
-            padding: 10px 12px;
+        .compare-card-a { border-left: 3px solid #4dd0ff; }
+        .compare-card-b { border-left: 3px solid #ff9a4d; }
+
+        .compare-card-tag {
+            color: #fff;
+            font-weight: 700;
+            width: 20px;
+            text-align: center;
+            flex: 0 0 auto;
+        }
+
+        .compare-card select,
+        .compare-card input[type="date"] {
+            flex: 1 1 45%;
+            min-width: 0;
             min-height: 40px;
-            background-color: #4CAF50;
-            color: white;
+            padding: 6px 8px;
+            border-radius: 6px;
             border: none;
+            background: #fff;
+            font-size: 14px;
+        }
+
+        #flickButton {
+            min-height: 44px;
+            border: none;
+            border-radius: 8px;
+            background: #4CAF50;
+            color: #fff;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
-            border-radius: 5px;
-            white-space: nowrap;
         }
 
-        #controlsToolbar .load-markers-input {
-            max-width: 140px;
-            align-self: center;
-            color: white;
-        }
-
-        .fade-panel {
-            position: absolute;
-            top: 60px;
-            left: 10px;
-            margin-top: env(safe-area-inset-top, 0px);
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 1000;
-            max-width: calc(100vw - 40px);
-            max-height: 60vh;
-            overflow-y: auto;
-        }
-
-        .fade-panel h3 {
-            margin: 8px 0 4px;
-        }
-
-        .fade-panel input[type="number"] {
-            width: 80px;
-        }
-
-        @media (max-width: 480px) {
-            #controlsToolbar button,
-            #controlsToolbar select {
-                flex: 1 1 calc(50% - 8px);
-                font-size: 13px;
-                padding: 12px 8px;
-            }
-        }
+        .cesium-infoBox { display: none !important; }
     </style>
 </head>
 <body>
     <div id="cesiumContainer"></div>
-    <button id="loginButton">Login</button>
-    <button id="logoutButton">Logout</button>
 
-    <div id="controlsToolbar">
-        <select id="cloudLayers">
-            <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">True Color</option>
-            <option value="MODIS_Terra_CorrectedReflectance_TrueColor">MODIS Terra</option>
-            <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua</option>
-        </select>
+    <div id="sideLabelA" class="side-label">A</div>
+    <div id="sideLabelB" class="side-label">B</div>
+
+    <div id="splitHandle">
+        <div class="split-handle-grip">&#8596;</div>
+    </div>
+
+    <div id="comparePanel">
+        <div class="compare-card compare-card-a">
+            <span class="compare-card-tag">A</span>
+            <select id="sourceA"></select>
+            <input type="date" id="dateA">
+        </div>
+        <div class="compare-card compare-card-b">
+            <span class="compare-card-tag">B</span>
+            <select id="sourceB"></select>
+            <input type="date" id="dateB">
+        </div>
+        <button id="flickButton" type="button">&#8646; Flick A / B</button>
     </div>
 
     <script src="Cesium/Cesium.js"></script>
