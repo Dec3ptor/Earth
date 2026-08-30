@@ -11,7 +11,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     infoBox: false,
     sceneMode: Cesium.SceneMode.SCENE3D,
     shadows: true,
-    shouldAnimate: true
+    shouldAnimate: true,
+    // Without an explicit base layer, Cesium falls back to its default Bing/Ion
+    // "World Imagery", which needs an Ion access token. This app never sets one,
+    // so it rides on Cesium's shared public demo token, which is rate-limited and
+    // starts rejecting tile requests once you zoom in and need a burst of new,
+    // higher-resolution tiles. When that happens the globe falls back to its
+    // default no-imagery base color -- a solid navy blue. OpenStreetMap tiles
+    // need no token and aren't subject to that shared quota.
+    baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({
+      url: 'https://tile.openstreetmap.org/'
+    })),
+    baseLayerPicker: false
   });
 
   // Remove the Cesium ion logo if it exists
@@ -310,8 +321,10 @@ updateCloudLayer(currentLayer);
 
 
 
-  // If you want to remove all credits
-  viewer.cesiumWidget.creditContainer.style.display = "none";
+  // Keep the credit container visible (but styled out of the way): OpenStreetMap's
+  // tile usage policy requires attribution to stay on screen, so it can't be hidden.
+  viewer.cesiumWidget.creditContainer.style.fontSize = '10px';
+  viewer.cesiumWidget.creditContainer.style.opacity = '0.7';
 
   // Enable the sun and sky atmosphere
   viewer.scene.globe.enableLighting = true;
