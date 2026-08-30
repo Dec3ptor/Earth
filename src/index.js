@@ -9,8 +9,8 @@ window.CESIUM_BASE_URL = './Cesium';
 // - layerName: the Layer ID you set up inside that configuration (e.g. "TRUE-COLOR")
 // Until instanceId is set, the Sentinel Hub option is disabled in the source pickers.
 const SENTINEL_HUB_CONFIG = {
-  instanceId: '',
-  layerName: '1281609a-89fc-4e57-9d32-dd574090c591'
+  instanceId: '1281609a-89fc-4e57-9d32-dd574090c591',
+  layerName: 'TRUE-COLOR'
 };
 
 // Every source shares the same {Time}/{TileMatrix}/{TileRow}/{TileCol} URL-template
